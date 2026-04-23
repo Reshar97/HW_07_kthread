@@ -1,51 +1,71 @@
+#include <errno.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
 #include <unistd.h>
 
+#define CYCLES 100
 #define NUM_READERS 5
 #define NUM_WRITERS 2
-#define CYCLES 1000000
 
-pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
-unsigned long long counter = 0;
+int counter = 0;
+pthread_mutex_t wlock = PTHREAD_MUTEX_INITIALIZER;
+pthread_t readers[NUM_READERS], writers[NUM_WRITERS];
 
-void* reader(void* arg) {
-    int id = *(int*)arg;
-    while (1) {
-        pthread_rwlock_rdlock(&rwlock);
-        counter++;
-        pthread_rwlock_unlock(&rwlock);
-        if (counter >= CYCLES) break;
+void *reader_fn(void *arg) {
+  int id = *(int *)arg;
+  while (counter < CYCLES) {
+    pthread_mutex_lock(&wlock);
+    if (counter >= CYCLES) {
+      pthread_mutex_unlock(&wlock);
+      break;
     }
-    return NULL;
+    printf("Reader %d: counter = %d\n", id, counter);
+    pthread_mutex_unlock(&wlock);
+    sleep(1);
+  }
+  return NULL;
 }
 
-void* writer(void* arg) {
-    int id = *(int*)arg;
-    while (1) {
-        pthread_rwlock_wrlock(&rwlock);
-        counter++;
-        pthread_rwlock_unlock(&rwlock);
-        if (counter >= CYCLES) break;
+void *writer_fn(void *arg) {
+  int id = *(int *)arg;
+  while (1) {
+    pthread_mutex_lock(&wlock);
+    if (counter >= CYCLES) {
+      pthread_mutex_unlock(&wlock);
+      break;
     }
-    return NULL;
+    counter++;
+    printf("Writer %d: counter = %d\n", id, counter);
+    pthread_mutex_unlock(&wlock);
+    sleep(1);
+  }
+  return NULL;
 }
 
 int main() {
-    pthread_t readers[NUM_READERS], writers[NUM_WRITERS];
-    int ids[NUM_READERS + NUM_WRITERS], i;
+  int i, ids[NUM_READERS + NUM_WRITERS];
 
-    for (i = 0; i < NUM_READERS + NUM_WRITERS; i++) ids[i] = i;
+  for (i = 0; i < NUM_READERS; i++) {
+    ids[i] = i;
+    if (pthread_create(&readers[i], NULL, reader_fn, &ids[i])) {
+      perror("pthread_create");
+      exit(EXIT_FAILURE);
+    }
+  }
 
-    for (i = 0; i < NUM_READERS; i++)
-        pthread_create(&readers[i], NULL, reader, &ids[i]);
-    for (i = 0; i < NUM_WRITERS; i++)
-        pthread_create(&writers[i], NULL, writer, &ids[NUM_READERS + i]);
+  for (i = 0; i < NUM_WRITERS; i++) {
+    ids[NUM_READERS + i] = i;
+    if (pthread_create(&writers[i], NULL, writer_fn, &ids[NUM_READERS + i])) {
+      perror("pthread_create");
+      exit(EXIT_FAILURE);
+    }
+  }
 
-    for (i = 0; i < NUM_READERS; i++) pthread_join(readers[i], NULL);
-    for (i = 0; i < NUM_WRITERS; i++) pthread_join(writers[i], NULL);
+  for (i = 0; i < NUM_READERS; i++)
+    pthread_join(readers[i], NULL);
+  for (i = 0; i < NUM_WRITERS; i++)
+    pthread_join(writers[i], NULL);
 
-    printf("Counter: %llu\n", counter);
-    return 0;
+  return 0;
 }

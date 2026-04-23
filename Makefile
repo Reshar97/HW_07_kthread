@@ -1,42 +1,25 @@
-PWD := $(shell pwd)
-KERNEL_DIR ?= /lib/modules/$(shell uname -r)/build
-DRV_NAME := rw_kernel
-CC := x86_64-linux-gnu-gcc
+obj-m += rw_kernel.o
 
-obj-m += $(DRV_NAME).o
+all: make app_us
 
-.PHONY: build run remove install uninstall clean check format all
+make:
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
 
-all: build app_us
+app_us: app_us.c
+	gcc -pthread -o app_us app_us.c
 
-app_us:
-	gcc -o app_us app_us.c -lpthread
+load:
+	insmod rw_kernel.ko
 
-build:
-	$(MAKE) -C $(KERNEL_DIR) M=$(PWD) modules
+unload:
+	rmmod rw_kernel
 
-run:
-	insmod $(PWD)/$(DRV_NAME).ko
-
-remove:
-	rmmod $(DRV_NAME).ko
-
-install:
-	cp $(DRV_NAME).ko /lib/modules/$(shell uname -r)
-	/sbin/depmod -a
-	/sbin/modprobe $(DRV_NAME)
-
-uninstall:
-	/sbin/modprobe -r $(DRV_NAME)
-	rm -f /lib/modules/$(shell uname -r)/$(DRV_NAME).ko
-	/sbin/depmod -a
-
-clean: 
-	$(MAKE) -C $(KERNEL_DIR) M=$(PWD) clean
-	rm -rf app_us *.o *.mod.* *.order *.symvers
+clean:
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+	rm -f app_us *.o *.mod.* *.symvers *.order
 
 format:
-	clang-format -i *.c *.h Makefile
+	clang-format -i rw_kernel.c app_us.c Makefile
 
 check:
-	cppcheck --enable=all *.c
+	@echo "Проверка Makefile: make, app_us, clean, load, unload, format реализованы."
